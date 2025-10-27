@@ -1,0 +1,19 @@
+# JFrog Artifactory Configuration
+[jfrog]
+url = "https://your-company.jfrog.io/artifactory"
+username = "your-username"
+password = "your-password-or-api-token"
+
+# List of repositories to clean (can be one or many)
+repositories = ["docker-local", "docker-prod", "docker-dev"]
+
+# Cleanup Configuration
+[cleanup]
+# Delete images older than this many days
+days_old = 30
+
+# Always keep at least this many recent tags per image
+keep_minimum = 3
+
+# Set to false to actually delete images (true = preview only)
+dry_run = true

@@ -1,0 +1,13 @@
+[project]
+name = "jfrog-cleaner"
+version = "0.1.0"
+description = "Clean old images from JFrog Container Registry"
+requires-python = ">=3.13"
+dependencies = ["requests>=2.31.0"]
+
+[project.scripts]
+jfrog-cleaner = "jfrog_cleaner:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
