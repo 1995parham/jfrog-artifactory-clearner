@@ -101,10 +101,14 @@ class JFrogCleaner:
             return False
 
     def clean_old_images(
-        self, days_old: int = 30, dry_run: bool = True, keep_minimum: int = 3,
-        include_images=None, exclude_images=None
+        self,
+        days_old: int = 30,
+        dry_run: bool = True,
+        keep_minimum: int = 3,
+        include_images=None,
+        exclude_images=None,
     ) -> dict[str, int]:
-	"""
+        """
         Remove images older than specified days.
         Args:
             days_old: Delete images older than this many days
@@ -126,20 +130,18 @@ class JFrogCleaner:
 
         images = self.get_images()
 
-        # --- NEW FEATURE ------------------------------
         if include_images:
             images = [i for i in images if i in include_images]
 
         if exclude_images:
             images = [i for i in images if i not in exclude_images]
-        # ----------------------------------------------
 
         for image_name in images:
             print(f"Processing image: {image_name}")
             tags = self.get_image_tags(image_name)
 
             if not tags:
-                print(f"  No tags found\n")
+                print("No tags found")
                 continue
 
             # Sort by modification date (newest first)
