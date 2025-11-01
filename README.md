@@ -52,6 +52,9 @@ password = "your-password-or-api-token"
 # List of repositories to clean (can specify one or many)
 repositories = ["docker-local", "docker-prod", "docker-dev"]
 
+# Specify images
+include_images = ["image1", "image2"]
+
 # Cleanup Configuration
 [cleanup]
 # Delete images older than this many days

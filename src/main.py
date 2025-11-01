@@ -8,7 +8,7 @@ Removes old Docker images from JFrog Artifactory based on age.
 import sys
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import requests
 
@@ -101,11 +101,11 @@ class JFrogCleaner:
             return False
 
     def clean_old_images(
-        self, days_old: int = 30, dry_run: bool = True, keep_minimum: int = 3
+        self, days_old: int = 30, dry_run: bool = True, keep_minimum: int = 3,
+        include_images=None, exclude_images=None
     ) -> dict[str, int]:
-        """
+	"""
         Remove images older than specified days.
-
         Args:
             days_old: Delete images older than this many days
             dry_run: If True, only simulate deletions
@@ -114,7 +114,8 @@ class JFrogCleaner:
         Returns:
             dictionary with statistics (checked, deleted, kept, errors)
         """
-        cutoff_date = datetime.now() - timedelta(days=days_old)
+
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
         stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
 
         print(
@@ -124,6 +125,14 @@ class JFrogCleaner:
         print(f"Keeping minimum {keep_minimum} recent tags per image\n")
 
         images = self.get_images()
+
+        # --- NEW FEATURE ------------------------------
+        if include_images:
+            images = [i for i in images if i in include_images]
+
+        if exclude_images:
+            images = [i for i in images if i not in exclude_images]
+        # ----------------------------------------------
 
         for image_name in images:
             print(f"Processing image: {image_name}")
@@ -180,6 +189,9 @@ def main():
     jfrog_username = jfrog_config.get("username")
     jfrog_password = jfrog_config.get("password")
     repositories = jfrog_config.get("repositories", [])
+    include_images = jfrog_config.get("include_images")
+    exclude_images = jfrog_config.get("exclude_images")
+
     days_old = cleanup_config.get("days_old", 30)
     keep_minimum = cleanup_config.get("keep_minimum", 3)
     dry_run = cleanup_config.get("dry_run", True)
@@ -207,7 +219,11 @@ def main():
 
         cleaner = JFrogCleaner(jfrog_url, jfrog_username, jfrog_password, repo)
         stats = cleaner.clean_old_images(
-            days_old=days_old, dry_run=dry_run, keep_minimum=keep_minimum
+            days_old=days_old,
+            dry_run=dry_run,
+            keep_minimum=keep_minimum,
+            include_images=include_images,
+            exclude_images=exclude_images,
         )
 
         # Accumulate stats
