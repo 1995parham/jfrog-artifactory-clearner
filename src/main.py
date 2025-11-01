@@ -11,6 +11,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import requests
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+
+console = Console()
 
 
 @dataclass
@@ -45,7 +50,7 @@ class JFrogCleaner:
             data = response.json()
             return data.get("repositories", [])
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching images: {e}")
+            console.print(f"[red]Error fetching images: {e}[/red]")
             return []
 
     def get_image_tags(self, image_name: str) -> list[ImageTag]:
@@ -71,7 +76,7 @@ class JFrogCleaner:
 
             return tags
         except requests.exceptions.RequestException as e:
-            print(f"Error fetching tags for {image_name}: {e}")
+            console.print(f"[red]Error fetching tags for {image_name}: {e}[/red]")
             return []
 
     def delete_image_tag(self, image_path: str, dry_run: bool = True) -> bool:
@@ -88,16 +93,16 @@ class JFrogCleaner:
         delete_url = f"{self.url}/{self.repository}/{image_path}"
 
         if dry_run:
-            print(f"  [DRY RUN] Would delete: {image_path}")
+            console.print(f"  [yellow]Would delete: {image_path}[/yellow]")
             return True
 
         try:
             response = self.session.delete(delete_url)
             response.raise_for_status()
-            print(f"  Deleted: {image_path}")
+            console.print(f"  [green]✓ Deleted: {image_path}[/green]")
             return True
         except requests.exceptions.RequestException as e:
-            print(f"  Error deleting {image_path}: {e}")
+            console.print(f"  [red]✗ Error deleting {image_path}: {e}[/red]")
             return False
 
     def clean_old_images(
@@ -122,11 +127,16 @@ class JFrogCleaner:
         cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
         stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
 
-        print(
-            f"Cleaning images older than {days_old} days (before {cutoff_date.date()})"
+        console.print(
+            f"[cyan]Cleaning images older than {days_old} days (before {cutoff_date.date()})[/cyan]"
         )
-        print(f"Mode: {'DRY RUN' if dry_run else 'LIVE DELETION'}")
-        print(f"Keeping minimum {keep_minimum} recent tags per image\n")
+        mode_color = "yellow" if dry_run else "red bold"
+        console.print(
+            f"Mode: [{mode_color}]{'DRY RUN' if dry_run else 'LIVE DELETION'}[/{mode_color}]"
+        )
+        console.print(
+            f"[cyan]Keeping minimum {keep_minimum} recent tags per image[/cyan]\n"
+        )
 
         images = self.get_images()
 
@@ -137,11 +147,13 @@ class JFrogCleaner:
             images = [i for i in images if i not in exclude_images]
 
         for image_name in images:
-            print(f"Processing image: {image_name}")
+            console.print(
+                f"\n[bold blue]Processing image:[/bold blue] [white]{image_name}[/white]"
+            )
             tags = self.get_image_tags(image_name)
 
             if not tags:
-                print("No tags found")
+                console.print("  [dim]No tags found[/dim]")
                 continue
 
             # Sort by modification date (newest first)
@@ -151,7 +163,9 @@ class JFrogCleaner:
             tags_to_check = tags[keep_minimum:]
             kept_count = len(tags) - len(tags_to_check)
 
-            print(f"  Found {len(tags)} tags, keeping {kept_count} most recent")
+            console.print(
+                f"  [dim]Found {len(tags)} tags, keeping {kept_count} most recent[/dim]"
+            )
 
             for tag_info in tags_to_check:
                 stats["checked"] += 1
@@ -168,8 +182,6 @@ class JFrogCleaner:
                 else:
                     stats["kept"] += 1
 
-            print()
-
         return stats
 
 
@@ -177,8 +189,10 @@ def main():
     config_path = Path(__file__).parent / "config.toml"
 
     if not config_path.exists():
-        print(f"Error: Configuration file not found at {config_path}")
-        print("Please copy config.toml and update with your settings.")
+        console.print(
+            f"[red]Error: Configuration file not found at {config_path}[/red]"
+        )
+        console.print("Please copy config.toml and update with your settings.")
         sys.exit(1)
 
     with open(config_path, "rb") as f:
@@ -199,25 +213,33 @@ def main():
     dry_run = cleanup_config.get("dry_run", True)
 
     if not all([jfrog_url, jfrog_username, jfrog_password]):
-        print("Error: Missing required configuration in config.toml!")
-        print(
+        console.print(
+            "[red]Error: Missing required configuration in config.toml![/red]"
+        )
+        console.print(
             "Please ensure [jfrog] section has: url, username, password, repositories"
         )
         sys.exit(1)
 
     if not repositories:
-        print("Error: No repositories specified in config.toml!")
-        print("Please add repositories list in [jfrog] section")
+        console.print("[red]Error: No repositories specified in config.toml![/red]")
+        console.print("Please add repositories list in [jfrog] section")
         sys.exit(1)
 
     total_stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
 
-    print(f"Processing {len(repositories)} repository/repositories\n")
+    console.print(
+        f"\n[bold magenta]Processing {len(repositories)} repository/repositories[/bold magenta]\n"
+    )
 
     for repo in repositories:
-        print("=" * 60)
-        print(f"Repository: {repo}")
-        print("=" * 60)
+        console.print(
+            Panel(
+                f"[bold cyan]{repo}[/bold cyan]",
+                title="Repository",
+                border_style="cyan",
+            )
+        )
 
         cleaner = JFrogCleaner(jfrog_url, jfrog_username, jfrog_password, repo)
         stats = cleaner.clean_old_images(
@@ -228,24 +250,42 @@ def main():
             exclude_images=exclude_images,
         )
 
-        # Accumulate stats
         for key in total_stats:
             total_stats[key] += stats[key]
 
-        print()
+        console.print()
 
-    print("=" * 60)
-    print("Overall Summary:")
-    print(f"  Repositories processed: {len(repositories)}")
-    print(f"  Images checked: {total_stats['checked']}")
-    print(f"  Images deleted: {total_stats['deleted']}")
-    print(f"  Images kept: {total_stats['kept']}")
-    print(f"  Errors: {total_stats['errors']}")
-    print("=" * 60)
+    table = Table(
+        title="Overall Summary",
+        border_style="green",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Metric", style="cyan", justify="left")
+    table.add_column("Count", style="white", justify="right")
+
+    table.add_row("Repositories processed", str(len(repositories)))
+    table.add_row("Images checked", str(total_stats["checked"]))
+    table.add_row(
+        "Images deleted",
+        (
+            f"[yellow]{total_stats['deleted']}[/yellow]"
+            if dry_run
+            else f"[red]{total_stats['deleted']}[/red]"
+        ),
+    )
+    table.add_row("Images kept", f"[green]{total_stats['kept']}[/green]")
+    table.add_row(
+        "Errors",
+        f"[red]{total_stats['errors']}[/red]" if total_stats["errors"] > 0 else "0",
+    )
+
+    console.print("\n")
+    console.print(table)
 
     if dry_run:
-        print(
-            "\nThis was a DRY RUN. Set dry_run=false in config.toml to actually delete images."
+        console.print(
+            "\n[yellow bold]⚠ This was a DRY RUN. Set dry_run=false in config.toml to actually delete images.[/yellow bold]"
         )
 
 
