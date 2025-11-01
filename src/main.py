@@ -222,17 +222,19 @@ def main():
 
     if not images:
         console.print("[red]Error: No images specified in config.toml![/red]")
-        console.print("Please add images list in [jfrog] section (format: repository/image-name)")
+        console.print(
+            "Please add images list in [jfrog] section (format: repository/image-name)"
+        )
         sys.exit(1)
 
     # Parse and group images by repository
     repo_images = {}
     for image_spec in images:
         if "/" not in image_spec:
+            console.print(f"[red]Error: Invalid image format '{image_spec}'![/red]")
             console.print(
-                f"[red]Error: Invalid image format '{image_spec}'![/red]"
+                "Expected format: repository/image-name (e.g., 'docker-local/myapp')"
             )
-            console.print("Expected format: repository/image-name (e.g., 'docker-local/myapp')")
             sys.exit(1)
 
         parts = image_spec.split("/", 1)
