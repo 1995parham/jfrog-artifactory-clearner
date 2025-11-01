@@ -205,9 +205,7 @@ def main():
     jfrog_url = jfrog_config.get("url")
     jfrog_username = os.path.expandvars(jfrog_config.get("username", ""))
     jfrog_password = os.path.expandvars(jfrog_config.get("password", ""))
-    repositories = jfrog_config.get("repositories", [])
-    include_images = jfrog_config.get("include_images")
-    exclude_images = jfrog_config.get("exclude_images")
+    images = jfrog_config.get("images", [])
 
     days_old = cleanup_config.get("days_old", 30)
     keep_minimum = cleanup_config.get("keep_minimum", 3)
@@ -218,25 +216,43 @@ def main():
             "[red]Error: Missing required configuration in config.toml![/red]"
         )
         console.print(
-            "Please ensure [jfrog] section has: url, username, password, repositories"
+            "Please ensure [jfrog] section has: url, username, password, images"
         )
         sys.exit(1)
 
-    if not repositories:
-        console.print("[red]Error: No repositories specified in config.toml![/red]")
-        console.print("Please add repositories list in [jfrog] section")
+    if not images:
+        console.print("[red]Error: No images specified in config.toml![/red]")
+        console.print("Please add images list in [jfrog] section (format: repository/image-name)")
         sys.exit(1)
+
+    # Parse and group images by repository
+    repo_images = {}
+    for image_spec in images:
+        if "/" not in image_spec:
+            console.print(
+                f"[red]Error: Invalid image format '{image_spec}'![/red]"
+            )
+            console.print("Expected format: repository/image-name (e.g., 'docker-local/myapp')")
+            sys.exit(1)
+
+        parts = image_spec.split("/", 1)
+        repo = parts[0]
+        image_name = parts[1]
+
+        if repo not in repo_images:
+            repo_images[repo] = []
+        repo_images[repo].append(image_name)
 
     total_stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
 
     console.print(
-        f"\n[bold magenta]Processing {len(repositories)} repository/repositories[/bold magenta]\n"
+        f"\n[bold magenta]Processing {len(repo_images)} repository/repositories with {len(images)} image(s)[/bold magenta]\n"
     )
 
-    for repo in repositories:
+    for repo, image_list in repo_images.items():
         console.print(
             Panel(
-                f"[bold cyan]{repo}[/bold cyan]",
+                f"[bold cyan]{repo}[/bold cyan]\nImages: [white]{', '.join(image_list)}[/white]",
                 title="Repository",
                 border_style="cyan",
             )
@@ -247,8 +263,8 @@ def main():
             days_old=days_old,
             dry_run=dry_run,
             keep_minimum=keep_minimum,
-            include_images=include_images,
-            exclude_images=exclude_images,
+            include_images=image_list,
+            exclude_images=None,
         )
 
         for key in total_stats:
@@ -265,7 +281,7 @@ def main():
     table.add_column("Metric", style="cyan", justify="left")
     table.add_column("Count", style="white", justify="right")
 
-    table.add_row("Repositories processed", str(len(repositories)))
+    table.add_row("Repositories processed", str(len(repo_images)))
     table.add_row("Images checked", str(total_stats["checked"]))
     table.add_row(
         "Images deleted",

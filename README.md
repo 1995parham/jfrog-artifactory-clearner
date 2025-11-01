@@ -4,7 +4,8 @@ A minimal, readable Python tool to remove old Docker images from JFrog Artifacto
 
 ## Features
 
-- Support for multiple repositories (clean all your repos at once)
+- Support for multiple repositories and images in a single configuration
+- Specify repository/image combinations for fine-grained control
 - Remove images older than a specified number of days
 - Always keep a minimum number of recent tags per image
 - Dry-run mode to preview deletions before executing
@@ -49,11 +50,9 @@ url = "https://your-company.jfrog.io/artifactory"
 username = "your-username"
 password = "your-password-or-api-token"
 
-# List of repositories to clean (can specify one or many)
-repositories = ["docker-local", "docker-prod", "docker-dev"]
-
-# Specify images
-include_images = ["image1", "image2"]
+# List of images to clean in the format: repository/image-name
+# You can specify images from different repositories
+images = ["docker-local/image1", "docker-local/image2", "docker-prod/production-app"]
 
 # Cleanup Configuration
 [cleanup]
@@ -67,10 +66,10 @@ keep_minimum = 3
 dry_run = true
 ```
 
-To clean a single repository, just use a single-item list:
+To clean a single image, just specify one:
 
 ```toml
-repositories = ["docker-local"]
+images = ["docker-local/myapp"]
 ```
 
 ## Usage
@@ -101,14 +100,13 @@ uv run main.py
 ## How It Works
 
 1. Connects to JFrog Artifactory using provided credentials
-2. For each repository in the configuration:
-   - Lists all images in the repository
-   - For each image:
-     - Fetches all tags with their modification dates
-     - Sorts tags by date (newest first)
-     - Keeps the minimum number of recent tags (default: 3)
-     - Deletes tags older than the specified days (default: 30)
-3. Prints per-repository and overall summary statistics
+2. Parses the images list and groups by repository
+3. For each repository/image combination:
+   - Fetches all tags with their modification dates
+   - Sorts tags by date (newest first)
+   - Keeps the minimum number of recent tags (default: 3)
+   - Deletes tags older than the specified days (default: 30)
+4. Prints per-repository and overall summary statistics
 
 ## Safety Features
 

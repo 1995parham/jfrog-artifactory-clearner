@@ -10,14 +10,12 @@ url = "https://your-company.jfrog.io/artifactory"
 username = "your-username"
 password = "your-password-or-api-token"
 
-# List of repositories to clean (can be one or many)
-repositories = ["docker-local", "docker-prod", "docker-dev"]
-
-# Optional: Only process these specific images (if not set, all images are processed)
-# include_images = ["myapp", "backend-service"]
-
-# Optional: Exclude these images from processing (if not set, no images are excluded)
-# exclude_images = ["production-critical", "do-not-delete"]
+# List of images to clean in the format: repository/image-name
+# You can specify images from different repositories
+# Examples:
+#   images = ["docker-local/myapp", "docker-prod/backend-service"]
+#   images = ["docker-local/frontend", "docker-local/backend", "docker-dev/test-app"]
+images = ["docker-local/image1", "docker-local/image2", "docker-prod/production-app"]
 
 # Cleanup Configuration
 [cleanup]
