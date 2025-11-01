@@ -5,6 +5,7 @@ JFrog Container Registry Cleaner
 Removes old Docker images from JFrog Artifactory based on age.
 """
 
+import os
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -202,8 +203,8 @@ def main():
     cleanup_config = config.get("cleanup", {})
 
     jfrog_url = jfrog_config.get("url")
-    jfrog_username = jfrog_config.get("username")
-    jfrog_password = jfrog_config.get("password")
+    jfrog_username = os.path.expandvars(jfrog_config.get("username", ""))
+    jfrog_password = os.path.expandvars(jfrog_config.get("password", ""))
     repositories = jfrog_config.get("repositories", [])
     include_images = jfrog_config.get("include_images")
     exclude_images = jfrog_config.get("exclude_images")

@@ -1,6 +1,12 @@
 # JFrog Artifactory Configuration
 [jfrog]
 url = "https://your-company.jfrog.io/artifactory"
+
+# You can use plain text or environment variables with ${VAR_NAME} or $VAR_NAME syntax
+# Examples:
+#   username = "myuser"              # Plain text
+#   username = "${JFROG_USERNAME}"   # From environment variable
+#   password = "$JFROG_API_TOKEN"    # From environment variable
 username = "your-username"
 password = "your-password-or-api-token"
 
