@@ -156,9 +156,6 @@ class JFrogCleaner:
             dry_run: If True, only simulate deletions
             keep_minimum: Default - always keep at least this many recent tags per image
             per_image_settings: Optional dict mapping image names to their specific settings
-
-        Returns:
-            CleanupStatistics object with cleanup statistics
         """
         if per_image_settings is None:
             per_image_settings = {}
@@ -249,16 +246,18 @@ def main():
     jfrog_url = jfrog_config.get("url")
     jfrog_username = os.path.expandvars(jfrog_config.get("username", ""))
     jfrog_password = os.path.expandvars(jfrog_config.get("password", ""))
-    images = jfrog_config.get("images", [])
 
     default_days_old = cleanup_config.get("days_old", 30)
     default_keep_minimum = cleanup_config.get("keep_minimum", 3)
     dry_run = cleanup_config.get("dry_run", True)
 
+    # Extract images from image_config
     image_settings: dict[str, PerImageSettings] = {}
+    images = []
     for img_config in image_configs:
         img_name = img_config.get("image")
         if img_name:
+            images.append(img_name)
             image_settings[img_name] = PerImageSettings(
                 days_old=img_config.get("days_old", default_days_old),
                 keep_minimum=img_config.get("keep_minimum", default_keep_minimum),
@@ -268,15 +267,13 @@ def main():
         console.print(
             "[red]Error: Missing required configuration in config.toml![/red]"
         )
-        console.print(
-            "Please ensure [jfrog] section has: url, username, password, images"
-        )
+        console.print("Please ensure [jfrog] section has: url, username, password")
         sys.exit(1)
 
     if not images:
         console.print("[red]Error: No images specified in config.toml![/red]")
         console.print(
-            "Please add images list in [jfrog] section (format: repository/image-name)"
+            "Please add [[image_config]] entries with 'image' field (format: repository/image-name)"
         )
         sys.exit(1)
 

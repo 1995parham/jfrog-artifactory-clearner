@@ -5,8 +5,8 @@ A minimal, readable Python tool to remove old Docker images from JFrog Artifacto
 ## Features
 
 - Support for multiple repositories and images in a single configuration
-- Specify repository/image combinations for fine-grained control
-- Per-image configuration for `days_old` and `keep_minimum` settings
+- Image-based configuration using `[[image_config]]` entries
+- Per-image settings for `days_old` and `keep_minimum` with default fallback
 - Remove images older than a specified number of days
 - Always keep a minimum number of recent tags per image
 - Configuration review table displayed at startup
@@ -52,10 +52,6 @@ url = "https://your-company.jfrog.io/artifactory"
 username = "your-username"
 password = "your-password-or-api-token"
 
-# List of images to clean in the format: repository/image-name
-# You can specify images from different repositories
-images = ["docker-local/image1", "docker-local/image2", "docker-prod/production-app"]
-
 # Cleanup Configuration
 [cleanup]
 # Default settings for all images (can be overridden per-image below)
@@ -67,25 +63,25 @@ keep_minimum = 3
 
 # Set to false to actually delete images (true = preview only)
 dry_run = true
-```
 
-### Per-Image Configuration
-
-You can override `days_old` and `keep_minimum` for specific images:
-
-```toml
-# Keep production images longer with more tags
+# Image Configuration
+# Specify images to clean in the format: repository/image-name
 [[image_config]]
 image = "docker-local/critical-app"
-days_old = 60
-keep_minimum = 5
+days_old = 60        # Keep for 60 days
+keep_minimum = 5     # Keep 5 most recent tags
 
-# Clean dev images more aggressively
 [[image_config]]
 image = "docker-local/dev-app"
-days_old = 7
-keep_minimum = 2
+days_old = 7         # Clean after 7 days
+keep_minimum = 2     # Keep 2 most recent tags
+
+# Or just specify the image to use default cleanup settings
+[[image_config]]
+image = "docker-local/another-app"
 ```
+
+Images are configured using `[[image_config]]` entries. You can optionally override `days_old` and `keep_minimum` for each image, or omit them to use the default settings.
 
 The tool will display a configuration table at startup showing the settings for each image.
 
@@ -117,15 +113,16 @@ uv run main.py
 ## How It Works
 
 1. Connects to JFrog Artifactory using provided credentials
-2. Displays a configuration table showing settings for each image
-3. Parses the images list and groups by repository
-4. For each repository/image combination:
+2. Reads image configurations from `[[image_config]]` entries
+3. Displays a configuration table showing settings for each image
+4. Groups images by repository
+5. For each repository/image combination:
    - Applies the image-specific or default cleanup settings
    - Fetches all tags with their modification dates
    - Sorts tags by date (newest first)
    - Keeps the minimum number of recent tags (per-image or default: 3)
    - Deletes tags older than the specified days (per-image or default: 30)
-5. Prints per-repository and overall summary statistics
+6. Prints per-repository and overall summary statistics
 
 ## Safety Features
 

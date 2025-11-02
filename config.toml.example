@@ -10,13 +10,6 @@ url = "https://your-company.jfrog.io/artifactory"
 username = "your-username"
 password = "your-password-or-api-token"
 
-# List of images to clean in the format: repository/image-name
-# You can specify images from different repositories
-# Examples:
-#   images = ["docker-local/myapp", "docker-prod/backend-service"]
-#   images = ["docker-local/frontend", "docker-local/backend", "docker-dev/test-app"]
-images = ["docker-local/image1", "docker-local/image2", "docker-prod/production-app"]
-
 # Cleanup Configuration
 [cleanup]
 # Default settings for all images (can be overridden per-image below)
@@ -29,15 +22,25 @@ keep_minimum = 3
 # Set to false to actually delete images (true = preview only)
 dry_run = true
 
-# Per-image configuration overrides (optional)
-# You can override days_old and/or keep_minimum for specific images
+# Image Configuration
+# Specify images to clean with optional overrides for days_old and keep_minimum
+# Format: repository/image-name (e.g., "docker-local/myapp")
 # Examples:
-#   [[image_config]]
-#   image = "docker-local/critical-app"
-#   days_old = 60
-#   keep_minimum = 5
-#
-#   [[image_config]]
-#   image = "docker-local/dev-app"
-#   days_old = 7
-#   keep_minimum = 2
+
+# With custom settings:
+[[image_config]]
+image = "docker-local/critical-app"
+days_old = 60
+keep_minimum = 5
+
+[[image_config]]
+image = "docker-local/dev-app"
+days_old = 7
+keep_minimum = 2
+
+# With default settings (omit days_old and keep_minimum):
+[[image_config]]
+image = "docker-local/myapp"
+
+[[image_config]]
+image = "docker-prod/production-app"
