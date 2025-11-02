@@ -19,6 +19,7 @@ images = ["docker-local/image1", "docker-local/image2", "docker-prod/production-
 
 # Cleanup Configuration
 [cleanup]
+# Default settings for all images (can be overridden per-image below)
 # Delete images older than this many days
 days_old = 30
 
@@ -27,3 +28,16 @@ keep_minimum = 3
 
 # Set to false to actually delete images (true = preview only)
 dry_run = true
+
+# Per-image configuration overrides (optional)
+# You can override days_old and/or keep_minimum for specific images
+# Examples:
+#   [[image_config]]
+#   image = "docker-local/critical-app"
+#   days_old = 60
+#   keep_minimum = 5
+#
+#   [[image_config]]
+#   image = "docker-local/dev-app"
+#   days_old = 7
+#   keep_minimum = 2

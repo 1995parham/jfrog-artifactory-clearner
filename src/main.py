@@ -28,6 +28,40 @@ class ImageTag:
     modified: str
 
 
+@dataclass
+class ImageCleanupConfig:
+    """Per-image cleanup configuration settings."""
+
+    image: str
+    days_old: int
+    keep_minimum: int
+
+
+@dataclass
+class PerImageSettings:
+    """Settings for a specific image's cleanup policy."""
+
+    days_old: int
+    keep_minimum: int
+
+
+@dataclass
+class CleanupStatistics:
+    """Statistics for cleanup operations."""
+
+    checked: int = 0
+    deleted: int = 0
+    kept: int = 0
+    errors: int = 0
+
+    def add(self, other: "CleanupStatistics") -> None:
+        """Add another statistics object to this one."""
+        self.checked += other.checked
+        self.deleted += other.deleted
+        self.kept += other.kept
+        self.errors += other.errors
+
+
 class JFrogCleaner:
     """Clean old images from JFrog Container Registry."""
 
@@ -111,32 +145,29 @@ class JFrogCleaner:
         days_old: int = 30,
         dry_run: bool = True,
         keep_minimum: int = 3,
-        include_images=None,
-        exclude_images=None,
-    ) -> dict[str, int]:
+        include_images: list[str] | None = None,
+        per_image_settings: dict[str, PerImageSettings] | None = None,
+    ) -> CleanupStatistics:
         """
         Remove images older than specified days.
+
         Args:
-            days_old: Delete images older than this many days
+            days_old: Default - delete images older than this many days
             dry_run: If True, only simulate deletions
-            keep_minimum: Always keep at least this many recent tags per image
+            keep_minimum: Default - always keep at least this many recent tags per image
+            per_image_settings: Optional dict mapping image names to their specific settings
 
         Returns:
-            dictionary with statistics (checked, deleted, kept, errors)
+            CleanupStatistics object with cleanup statistics
         """
+        if per_image_settings is None:
+            per_image_settings = {}
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
-        stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
+        stats = CleanupStatistics()
 
-        console.print(
-            f"[cyan]Cleaning images older than {days_old} days (before {cutoff_date.date()})[/cyan]"
-        )
         mode_color = "yellow" if dry_run else "red bold"
         console.print(
-            f"Mode: [{mode_color}]{'DRY RUN' if dry_run else 'LIVE DELETION'}[/{mode_color}]"
-        )
-        console.print(
-            f"[cyan]Keeping minimum {keep_minimum} recent tags per image[/cyan]\n"
+            f"Mode: [{mode_color}]{'DRY RUN' if dry_run else 'LIVE DELETION'}[/{mode_color}]\n"
         )
 
         images = self.get_images()
@@ -144,13 +175,25 @@ class JFrogCleaner:
         if include_images:
             images = [i for i in images if i in include_images]
 
-        if exclude_images:
-            images = [i for i in images if i not in exclude_images]
-
         for image_name in images:
+            img_settings = per_image_settings.get(image_name)
+            if img_settings:
+                img_days_old = img_settings.days_old
+                img_keep_minimum = img_settings.keep_minimum
+            else:
+                img_days_old = days_old
+                img_keep_minimum = keep_minimum
+
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=img_days_old)
+
             console.print(
                 f"\n[bold blue]Processing image:[/bold blue] [white]{image_name}[/white]"
             )
+            console.print(
+                f"  [cyan]Settings: {img_days_old} days old (before {cutoff_date.date()}), "
+                f"keep minimum {img_keep_minimum} tags[/cyan]"
+            )
+
             tags = self.get_image_tags(image_name)
 
             if not tags:
@@ -161,7 +204,7 @@ class JFrogCleaner:
             tags.sort(key=lambda x: x.modified, reverse=True)
 
             # Keep minimum number of recent tags
-            tags_to_check = tags[keep_minimum:]
+            tags_to_check = tags[img_keep_minimum:]
             kept_count = len(tags) - len(tags_to_check)
 
             console.print(
@@ -169,7 +212,7 @@ class JFrogCleaner:
             )
 
             for tag_info in tags_to_check:
-                stats["checked"] += 1
+                stats.checked += 1
                 tag_date = datetime.fromisoformat(
                     tag_info.modified.replace("Z", "+00:00")
                 )
@@ -177,11 +220,11 @@ class JFrogCleaner:
                 if tag_date < cutoff_date:
                     success = self.delete_image_tag(tag_info.path, dry_run)
                     if success:
-                        stats["deleted"] += 1
+                        stats.deleted += 1
                     else:
-                        stats["errors"] += 1
+                        stats.errors += 1
                 else:
-                    stats["kept"] += 1
+                    stats.kept += 1
 
         return stats
 
@@ -201,15 +244,25 @@ def main():
 
     jfrog_config = config.get("jfrog", {})
     cleanup_config = config.get("cleanup", {})
+    image_configs = config.get("image_config", [])
 
     jfrog_url = jfrog_config.get("url")
     jfrog_username = os.path.expandvars(jfrog_config.get("username", ""))
     jfrog_password = os.path.expandvars(jfrog_config.get("password", ""))
     images = jfrog_config.get("images", [])
 
-    days_old = cleanup_config.get("days_old", 30)
-    keep_minimum = cleanup_config.get("keep_minimum", 3)
+    default_days_old = cleanup_config.get("days_old", 30)
+    default_keep_minimum = cleanup_config.get("keep_minimum", 3)
     dry_run = cleanup_config.get("dry_run", True)
+
+    image_settings: dict[str, PerImageSettings] = {}
+    for img_config in image_configs:
+        img_name = img_config.get("image")
+        if img_name:
+            image_settings[img_name] = PerImageSettings(
+                days_old=img_config.get("days_old", default_days_old),
+                keep_minimum=img_config.get("keep_minimum", default_keep_minimum),
+            )
 
     if not all([jfrog_url, jfrog_username, jfrog_password]):
         console.print(
@@ -227,8 +280,8 @@ def main():
         )
         sys.exit(1)
 
-    # Parse and group images by repository
-    repo_images = {}
+    # Build image cleanup configurations
+    image_cleanup_configs: list[ImageCleanupConfig] = []
     for image_spec in images:
         if "/" not in image_spec:
             console.print(f"[red]Error: Invalid image format '{image_spec}'![/red]")
@@ -237,15 +290,59 @@ def main():
             )
             sys.exit(1)
 
-        parts = image_spec.split("/", 1)
+        # Check if this image has custom settings
+        settings = image_settings.get(image_spec)
+        if settings:
+            img_days_old = settings.days_old
+            img_keep_minimum = settings.keep_minimum
+        else:
+            img_days_old = default_days_old
+            img_keep_minimum = default_keep_minimum
+
+        image_cleanup_configs.append(
+            ImageCleanupConfig(
+                image=image_spec, days_old=img_days_old, keep_minimum=img_keep_minimum
+            )
+        )
+
+    # Display configuration summary
+    config_table = Table(
+        title="Cleanup Configuration",
+        border_style="cyan",
+        show_header=True,
+        header_style="bold magenta",
+    )
+    config_table.add_column("Image", style="white", justify="left")
+    config_table.add_column("Days Old", style="cyan", justify="center")
+    config_table.add_column("Keep Minimum", style="cyan", justify="center")
+
+    for image_cleanup_config in image_cleanup_configs:
+        config_table.add_row(
+            image_cleanup_config.image,
+            str(image_cleanup_config.days_old),
+            str(image_cleanup_config.keep_minimum),
+        )
+
+    console.print("\n")
+    console.print(config_table)
+    console.print("\n")
+
+    # Parse and group images by repository
+    repo_images: dict[str, list[str]] = {}
+    repo_configs: dict[str, dict[str, ImageCleanupConfig]] = {}
+    for image_cleanup_config in image_cleanup_configs:
+        parts = image_cleanup_config.image.split("/", 1)
         repo = parts[0]
         image_name = parts[1]
 
         if repo not in repo_images:
             repo_images[repo] = []
-        repo_images[repo].append(image_name)
+            repo_configs[repo] = {}
 
-    total_stats = {"checked": 0, "deleted": 0, "kept": 0, "errors": 0}
+        repo_images[repo].append(image_name)
+        repo_configs[repo][image_name] = image_cleanup_config
+
+    total_stats = CleanupStatistics()
 
     console.print(
         f"\n[bold magenta]Processing {len(repo_images)} repository/repositories with {len(images)} image(s)[/bold magenta]\n"
@@ -260,17 +357,25 @@ def main():
             )
         )
 
+        # Build per-image settings dict for this repository
+        repo_image_settings: dict[str, PerImageSettings] = {}
+        for image_name in image_list:
+            image_cleanup_config = repo_configs[repo][image_name]
+            repo_image_settings[image_name] = PerImageSettings(
+                days_old=image_cleanup_config.days_old,
+                keep_minimum=image_cleanup_config.keep_minimum,
+            )
+
         cleaner = JFrogCleaner(jfrog_url, jfrog_username, jfrog_password, repo)
         stats = cleaner.clean_old_images(
-            days_old=days_old,
+            days_old=default_days_old,
             dry_run=dry_run,
-            keep_minimum=keep_minimum,
+            keep_minimum=default_keep_minimum,
             include_images=image_list,
-            exclude_images=None,
+            per_image_settings=repo_image_settings,
         )
 
-        for key in total_stats:
-            total_stats[key] += stats[key]
+        total_stats.add(stats)
 
         console.print()
 
@@ -284,19 +389,19 @@ def main():
     table.add_column("Count", style="white", justify="right")
 
     table.add_row("Repositories processed", str(len(repo_images)))
-    table.add_row("Images checked", str(total_stats["checked"]))
+    table.add_row("Images checked", str(total_stats.checked))
     table.add_row(
         "Images deleted",
         (
-            f"[yellow]{total_stats['deleted']}[/yellow]"
+            f"[yellow]{total_stats.deleted}[/yellow]"
             if dry_run
-            else f"[red]{total_stats['deleted']}[/red]"
+            else f"[red]{total_stats.deleted}[/red]"
         ),
     )
-    table.add_row("Images kept", f"[green]{total_stats['kept']}[/green]")
+    table.add_row("Images kept", f"[green]{total_stats.kept}[/green]")
     table.add_row(
         "Errors",
-        f"[red]{total_stats['errors']}[/red]" if total_stats["errors"] > 0 else "0",
+        f"[red]{total_stats.errors}[/red]" if total_stats.errors > 0 else "0",
     )
 
     console.print("\n")
